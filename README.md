@@ -4,7 +4,7 @@
 ```
 app.py                    ← main Streamlit application (powered by Groq + Supabase)
 requirements.txt          ← Python dependencies
-.streamlit/secrets.toml   ← local secrets (GROQ_API_KEY, SUPABASE_URL, SUPABASE_KEY) — not committed to git
+.streamlit/secrets.toml   ← local secrets — not committed to git
 ```
 
 Student submissions and admin settings are stored in **Supabase** (Postgres), not in local files — see below.
@@ -19,18 +19,7 @@ This app stores all data in two Supabase tables instead of local JSON files, so 
 1. Create a free project at **https://supabase.com**.
 2. In the project dashboard, go to **SQL Editor → New query**, paste the following, and click **Run**:
 
-```sql
-create table if not exists submissions (
-  usn text primary key,
-  data jsonb not null,
-  updated_at timestamptz not null default now()
-);
 
-create table if not exists app_config (
-  key text primary key,
-  value jsonb not null
-);
-```
 
 3. Go to **Project Settings → API** and copy:
    - **Project URL** → `SUPABASE_URL`
@@ -56,9 +45,9 @@ pip install -r requirements.txt
 
 Create `.streamlit/secrets.toml` in the project root:
 ```toml
-GROQ_API_KEY  = "gsk_..."
+GROQ_API_KEY  = "..."
 SUPABASE_URL  = "https://xxxxxxxx.supabase.co"
-SUPABASE_KEY  = "sb_publishable_..."
+SUPABASE_KEY  = "..."
 ```
 
 (Alternatively, set `GROQ_API_KEY`, `SUPABASE_URL`, `SUPABASE_KEY` as environment variables instead of using secrets.toml.)
@@ -87,9 +76,9 @@ Open http://localhost:8501
 4. Click **Advanced settings → Secrets** and add:
 
 ```toml
-GROQ_API_KEY  = "gsk_..."
-SUPABASE_URL  = "https://xxxxxxxx.supabase.co"
-SUPABASE_KEY  = "sb_publishable_..."
+GROQ_API_KEY  = "..."
+SUPABASE_URL  = "....."
+SUPABASE_KEY  = "..."
 ```
 
 5. Click **Deploy**.
@@ -143,29 +132,43 @@ From the Admin Report page, a **"Allow copy-paste in the essay window for studen
 
 ### Admin testing mode
 
-If you register for the test (on the home page, not the Admin Report page) using the admin email (`sirish.k@cmrit.ac.in`) in the optional Email field:
+If you register for the test (on the home page, not the Admin Report page) using the admin email in the optional Email field:
 - The one-attempt-per-USN limit is bypassed, so you can repeat the test with the same USN as many times as needed.
 - Copy-paste is always allowed for you regardless of the student-facing toggle.
 - Your essay and grading result are **not** written to the `submissions` table and won't appear in the Admin Report or CSV export.
 
 ---
 
-## Feature summary
+## Features
 
-| Feature | Status |
-|---|---|
-| Student registration (name, USN required; email optional) | ✅ |
-| Data stored in Supabase (Postgres) — survives Streamlit Cloud restarts | ✅ |
-| 20-minute countdown timer (colour-coded) | ✅ |
-| Live word counter while typing (multiple spaces count as one word) | ✅ |
-| One **attempt** per USN — marked at test start, not just on submit (bypassed for admin testing) | ✅ |
-| Admin-controlled copy/paste toggle for students; always allowed for the admin test account | ✅ |
-| Essay box & submit button disabled when time runs out | ✅ |
-| Essay capped at 200 words before being sent to the AI grader | ✅ |
-| AI grading via Groq / LLaMA 3.3 70B — 5-criteria rubric (100 pts: Content & Understanding 30, Critical Thinking & Analysis 25, Organization & Structure 20, Evidence & Examples 15, Language & Presentation 10) | ✅ |
-| Friendly message on daily Groq quota exhaustion | ✅ |
-| Instant feedback & score breakdown bars | ✅ |
-| Admin report (email-gated) | ✅ |
-| Admin test runs excluded from submissions/report/CSV | ✅ |
-| Search / grade filter in report | ✅ |
-| CSV export | ✅ |
+### Test-taking experience
+- Simple registration screen (name + ID) before the timed test begins.
+- Essay topic chosen from a curated set of professional/workplace prompts.
+- 20-minute countdown timer that changes colour as time runs low (green → amber → red).
+- Live word counter while typing, with colour cues for the recommended 100–200 word range.
+- Essay box and submit button automatically disable once time runs out.
+- Auto-submit fires the moment the timer hits zero, so no work is lost.
+- One attempt per student — enforced from the moment the test starts, not just at submission.
+- Optional admin-controlled copy/paste restriction in the essay editor, to discourage pasting in pre-written content.
+- Submissions are locked after grading — no further edits.
+
+### AI-powered grading
+- Essays are graded automatically by an LLM (Groq-hosted LLaMA 3.3 70B) right after submission.
+- Scored against a 5-criteria, 100-point rubric: Content & Understanding, Critical Thinking & Analysis, Organization & Structure, Relevance & Supporting Examples, and Language & Presentation.
+- Off-topic essays are automatically detected and capped at a low score regardless of writing quality.
+- Grading is calibrated for a 20-minute timed exercise rather than a polished take-home essay.
+- Each result includes a letter grade, a written summary of strengths and areas for improvement, overall feedback, and a visual score breakdown.
+- If the AI provider's daily quota runs out, students see a friendly retry-tomorrow message instead of a raw error.
+
+### Admin tools
+- Dedicated Admin Report dashboard, separate from the student test flow.
+- Live toggle to allow/disallow copy-paste for all students, applied within ~30 seconds.
+- Class-wide stats: total submissions, class average score, and grade distribution.
+- Search and grade-filter across all submissions.
+- One-click CSV export of full results, including the rubric breakdown and AI feedback for every student.
+- A dedicated admin testing mode for trying out the flow end-to-end without it counting as a real student attempt or appearing in reports/exports.
+- "Danger zone" control to clear all stored submissions, gated behind an explicit confirmation checkbox.
+
+### Data & reliability
+- All submissions and settings are stored in a hosted Postgres database, so data survives app restarts and redeploys.
+- Admin settings (like the copy/paste toggle) are shared centrally and apply live to every student's session.

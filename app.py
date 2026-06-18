@@ -81,6 +81,7 @@ st.markdown("""
     padding:.4rem .9rem; font-size:.85rem; font-weight:600;
   }
   .word-counter { color:#57606a; font-size:.8rem; font-family:'JetBrains Mono',monospace; }
+  .st-key-auto_submit_container { display: none; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -215,6 +216,30 @@ Grade mapping: A=90-100, B=75-89, C=60-74, D=45-59, F=below 45"""
     raw = re.sub(r"```json|```", "", raw).strip()
     return json.loads(raw)
 
+def submit_essay(info: dict, essay: str, words: int):
+    with st.spinner("Grading your essay with AI… this takes a few seconds."):
+        try:
+            result = grade_essay(info["name"], info["topic"], essay)
+            result["essay"]        = essay
+            result["word_count"]   = words
+            result["submitted_at"] = datetime.datetime.now().isoformat()
+            result["name"]         = info["name"]
+            result["usn"]          = info["usn"]
+            result["topic"]        = info["topic"]
+            if not info.get("is_admin"):
+                save_submission(info["usn"], result)
+            st.session_state.result    = result
+            st.session_state.submitted = True
+            st.session_state.page      = "result"
+            st.rerun()
+        except RateLimitError:
+            st.error(
+                "⚠️ The daily AI grading quota has been used up for today. "
+                "Please copy your essay somewhere safe and try submitting again tomorrow once the quota renews."
+            )
+        except Exception as e:
+            st.error(f"Grading error: {e}")
+
 # ── Timer helpers ───────────────────────────────────────────────────────────────
 def start_timer():
     st.session_state["timer_start"] = time.time()
@@ -229,12 +254,27 @@ def fmt_time(secs: int) -> str:
     m, s = divmod(secs, 60)
     return f"{m:02d}:{s:02d}"
 
+# ── Pure helpers (rules also applied inline in the UI; extracted for testability) ──
+def count_words(text: str) -> int:
+    return len(re.findall(r"\S+", text))
+
+def is_valid_usn(usn: str) -> bool:
+    return usn.strip().upper().startswith("1CR")
+
+def word_count_color(words: int) -> str:
+    if 150 <= words <= 200:
+        return "#1a7f37"
+    if 130 <= words < 150 or 200 < words <= 220:
+        return "#9a6700"
+    return "#bc4c00"
+
 # ── Session defaults ────────────────────────────────────────────────────────────
 for key, val in {
     "page": "home",
     "student_info": None,
     "result": None,
     "submitted": False,
+    "auto_submit_done": False,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = val
@@ -254,17 +294,16 @@ if st.session_state.page == "home":
 
     if mode == "📝 Take the Essay Test":
         st.markdown('<div class="card">', unsafe_allow_html=True)
-        st.subheader("Student Registration")
+        st.subheader("Student Details")
 
         name  = st.text_input("Full Name *")
-        usn   = st.text_input("USN (University Seat Number) *")
+        usn   = st.text_input("USN *")
         topic = st.selectbox("Choose Essay Topic *", ESSAY_TOPICS)
 
         st.markdown("""
         **Rules:**
-        - USN must start with **1CR**.
         - You have **20 minutes** from the moment you start the test.
-        - Essay must be **150–200 words**.
+        - Essay must be **100–200 words**.
         - Once submitted, **no edits** are allowed.
         - One submission per USN.
         """)
@@ -274,8 +313,8 @@ if st.session_state.page == "home":
             is_admin_session = usn.strip().upper() == ADMIN_USN
             if not all([name.strip(), usn.strip(), topic]):
                 st.error("Please fill in all required fields.")
-            elif not usn.strip().upper().startswith("1CR"):
-                st.error("Invalid USN. USN must start with **1CR**.")
+            elif not is_valid_usn(usn):
+                st.error(f"Invalid USN: **{usn.upper()}**")
             elif not is_admin_session and already_submitted(usn.strip()):
                 st.error(f"USN **{usn.upper()}** has already attempted this test. Only one attempt per USN is allowed.")
             else:
@@ -290,8 +329,9 @@ if st.session_state.page == "home":
                     "topic": topic,
                     "is_admin": is_admin_session,
                 }
-                st.session_state.result    = None
-                st.session_state.submitted = False
+                st.session_state.result           = None
+                st.session_state.submitted        = False
+                st.session_state.auto_submit_done = False
                 start_timer()
                 st.session_state.page = "exam"
                 st.rerun()
@@ -299,13 +339,14 @@ if st.session_state.page == "home":
     else:
         st.markdown('<div class="card">', unsafe_allow_html=True)
         st.subheader("Admin Access")
-        admin_email = st.text_input("Enter admin email to access report")
+        admin_email = st.text_input("Admin email")
+        admin_usn   = st.text_input("Admin USN")
         if st.button("🔐 Access Report", use_container_width=True):
-            if admin_email.strip().lower() == ADMIN_EMAIL.lower():
+            if admin_email.strip().lower() == ADMIN_EMAIL.lower() and admin_usn.strip().upper() == ADMIN_USN:
                 st.session_state.page = "report"
                 st.rerun()
             else:
-                st.error("Access denied. Invalid admin email.")
+                st.error("Access denied. Invalid admin email or USN.")
         st.markdown("</div>", unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -330,24 +371,68 @@ elif st.session_state.page == "exam":
           <p>Topic: <strong style="color:#1f2328;">{info['topic']}</strong></p>
         </div>""", unsafe_allow_html=True)
     with col2:
-        st.markdown(f'<div class="timer-box {tcls}">{fmt_time(secs)}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="timer-box {tcls}" id="timer-display">{fmt_time(secs)}</div>', unsafe_allow_html=True)
+
+    if not st.session_state.submitted:
+        components.html(f"""
+        <script>
+        (function() {{
+          const doc = window.parent.document;
+          const el = doc.getElementById('timer-display');
+          if (!el) return;
+          if (doc.__essayTimerInterval) {{
+            clearInterval(doc.__essayTimerInterval);
+          }}
+          let remaining = {secs};
+          function fmt(s) {{
+            const m = Math.floor(s / 60);
+            const sec = s % 60;
+            return String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+          }}
+          function applyClass(s) {{
+            el.classList.remove('timer-ok', 'timer-warn');
+            if (s > 600) el.classList.add('timer-ok');
+            else if (s > 180) el.classList.add('timer-warn');
+          }}
+          el.textContent = fmt(remaining);
+          applyClass(remaining);
+          doc.__essayTimerInterval = setInterval(function() {{
+            remaining -= 1;
+            if (remaining <= 0) {{
+              clearInterval(doc.__essayTimerInterval);
+              el.textContent = '00:00';
+              const textarea = doc.querySelector('textarea');
+              if (textarea) {{
+                textarea.blur();
+              }}
+              setTimeout(function() {{
+                const btn = doc.querySelector('.st-key-auto_submit_container button');
+                if (btn) btn.click();
+              }}, 400);
+              return;
+            }}
+            el.textContent = fmt(remaining);
+            applyClass(remaining);
+          }}, 1000);
+        }})();
+        </script>
+        """, height=0)
 
     if secs == 0:
-        st.error("⏰ Time is up! Your essay will be auto-submitted.")
-        st.session_state.submitted = True
+        st.error("⏰ Time is up! Your essay is being submitted for evaluation…")
 
     if not st.session_state.submitted:
         essay = st.text_area(
-            "Write your essay here (150–200 words):",
+            "Write your essay here (100–200 words):",
             height=500,
             placeholder="Begin writing your essay…",
             key="essay_text",
             disabled=(secs == 0),
         )
 
-        words = len(re.findall(r"\S+", essay)) if essay.strip() else 0
-        wcolor = "#1a7f37" if 150 <= words <= 200 else ("#9a6700" if 130 <= words < 150 or 200 < words <= 220 else "#bc4c00")
-        st.markdown(f'<p class="word-counter" id="word-counter-display" style="color:{wcolor};">Word count: {words} / 150–200</p>', unsafe_allow_html=True)
+        words = count_words(essay) if essay.strip() else 0
+        wcolor = word_count_color(words)
+        st.markdown(f'<p class="word-counter" id="word-counter-display" style="color:{wcolor};">Word count: {words} / 100–200</p>', unsafe_allow_html=True)
 
         components.html("""
         <script>
@@ -358,7 +443,7 @@ elif st.session_state.page == "exam":
           if (!textarea || !counter) return;
           const update = () => {
             const words = textarea.value.trim() ? textarea.value.trim().split(/\\s+/).filter(Boolean).length : 0;
-            counter.textContent = 'Word count: ' + words + ' / 150–200';
+            counter.textContent = 'Word count: ' + words + ' / 100–200';
             let color = '#bc4c00';
             if (words >= 150 && words <= 200) color = '#1a7f37';
             else if ((words >= 130 && words < 150) || (words > 200 && words <= 220)) color = '#9a6700';
@@ -388,44 +473,28 @@ elif st.session_state.page == "exam":
             </script>
             """, height=0)
 
+        with st.container(key="auto_submit_container"):
+            auto_submit_clicked = st.button("auto-submit-on-timeout", key="auto_submit_btn")
+
         submit_col, _ = st.columns([1, 3])
         with submit_col:
-            if st.button("✅ Submit Essay", use_container_width=True, disabled=(secs == 0)):
-                if words < 50:
-                    st.error("Essay is too short. Please write at least 50 words.")
-                else:
-                    with st.spinner("Grading your essay with AI… this takes a few seconds."):
-                        try:
-                            result = grade_essay(info["name"], info["topic"], essay)
-                            result["essay"]        = essay
-                            result["word_count"]   = words
-                            result["submitted_at"] = datetime.datetime.now().isoformat()
-                            result["name"]         = info["name"]
-                            result["usn"]          = info["usn"]
-                            result["topic"]        = info["topic"]
-                            if not info.get("is_admin"):
-                                save_submission(info["usn"], result)
-                            st.session_state.result    = result
-                            st.session_state.submitted = True
-                            st.session_state.page      = "result"
-                            st.rerun()
-                        except RateLimitError:
-                            st.error(
-                                "⚠️ The daily AI grading quota has been used up for today. "
-                                "Please copy your essay somewhere safe and try submitting again tomorrow once the quota renews."
-                            )
-                        except Exception as e:
-                            st.error(f"Grading error: {e}")
+            manual_submit_clicked = st.button("✅ Submit Essay", use_container_width=True, disabled=(secs == 0))
+
+        if auto_submit_clicked:
+            submit_essay(info, essay, words)
+        elif manual_submit_clicked:
+            if words < 50:
+                st.error("Essay is too short. Please write at least 50 words.")
+            else:
+                submit_essay(info, essay, words)
+        elif secs == 0 and not st.session_state.auto_submit_done:
+            st.session_state.auto_submit_done = True
+            submit_essay(info, essay, words)
     else:
         st.info("Essay submitted. Redirecting…")
         time.sleep(2)
         st.session_state.page = "result"
         st.rerun()
-
-    # auto-refresh every 30 s to update timer display
-    st.markdown("""
-    <script>setTimeout(function(){ window.location.reload(); }, 30000);</script>
-    """, unsafe_allow_html=True)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 #  PAGE: RESULT
