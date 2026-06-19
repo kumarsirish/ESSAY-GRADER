@@ -311,10 +311,13 @@ if st.session_state.page == "home":
 
         if st.button("🚀 Start Test", use_container_width=True):
             is_admin_session = usn.strip().upper() == ADMIN_USN
+            multiple_attempts_allowed = load_config().get("multiple_attempts_enabled", True)
             if not all([name.strip(), usn.strip(), topic]):
                 st.error("Please fill in all required fields.")
             elif not is_valid_usn(usn):
                 st.error(f"Invalid USN: **{usn.upper()}**")
+            elif not is_admin_session and not multiple_attempts_allowed and already_submitted(usn.strip()):
+                st.error(f"USN **{usn.upper()}** has already attempted this test. Multiple attempts are currently disabled.")
             else:
                 st.session_state.student_info = {
                     "name": name.strip(), "usn": usn.strip().upper(),
@@ -587,6 +590,13 @@ elif st.session_state.page == "report":
     st.caption("Off by default. The admin test USN (1CRADMIN) can always paste regardless of this setting.")
     if paste_on != cfg.get("paste_enabled", False):
         cfg["paste_enabled"] = paste_on
+        save_config(cfg)
+        st.rerun()
+
+    multiple_attempts_on = st.toggle("Allow multiple attempts per USN", value=cfg.get("multiple_attempts_enabled", True))
+    st.caption("On by default. When off, a USN that has already submitted once cannot start the test again.")
+    if multiple_attempts_on != cfg.get("multiple_attempts_enabled", True):
+        cfg["multiple_attempts_enabled"] = multiple_attempts_on
         save_config(cfg)
         st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
