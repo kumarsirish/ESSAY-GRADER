@@ -228,8 +228,7 @@ def submit_essay(info: dict, essay: str, words: int):
             result["name"]         = info["name"]
             result["usn"]          = info["usn"]
             result["topic"]        = info["topic"]
-            if not info.get("is_admin"):
-                save_submission(info["usn"], result)
+            save_submission(info["usn"], result)
             st.session_state.result    = result
             st.session_state.submitted = True
             st.session_state.page      = "result"
@@ -572,7 +571,7 @@ elif st.session_state.page == "result":
 #  PAGE: REPORT (admin only)
 # ═══════════════════════════════════════════════════════════════════════════════
 elif st.session_state.page == "report":
-    subs = load_submissions()
+    subs = [s for s in load_submissions() if s.get("usn") != ADMIN_USN]
 
     st.markdown("""
     <div class="hero">

@@ -153,9 +153,9 @@ From the Admin Report page, a **"Allow copy-paste in the essay window for studen
 
 ### Admin testing mode
 
-If you register for the test (on the home page, not the Admin Report page) using the admin email in the optional Email field:
+If you register for the test (on the home page, not the Admin Report page) using the admin USN:
 - Copy-paste is always allowed for you regardless of the student-facing toggle.
-- Your essay and grading result are **not** written to the `submissions` table and won't appear in the Admin Report or CSV export.
+- Your essay and grading result are written to the `submissions` table, but are filtered out of the Admin Report and CSV export so they don't skew class stats.
 
 ---
 
