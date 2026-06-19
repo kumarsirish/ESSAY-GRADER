@@ -95,6 +95,8 @@ ESSAY_TOPICS  = [
     "Remote Work vs. Office Collaboration: The Productivity Debate",
     "The Necessity of Continuous Learning for Software Engineers",
     "Social Media: A Tool for Connection or Professional Distraction?",
+    "Synthetic Media and the Death of Truth: Can Democracy Survive an Internet Where Anything Can Be Faked?",
+    "Engineering Compulsion: Are Software Developers Accountable for Algorithms Built to Exploit Human Psychology?",
 ]
 
 # ── Supabase client ─────────────────────────────────────────────────────────────

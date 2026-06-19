@@ -143,7 +143,7 @@ If you register for the test (on the home page, not the Admin Report page) using
 
 ### Test-taking experience
 - Simple registration screen (name + ID) before the timed test begins.
-- Essay topic chosen from a curated set of professional/workplace prompts.
+- Essay topic is chosen by the student from a curated set of professional/workplace prompts before the timer starts.
 - 20-minute countdown timer that changes colour as time runs low (green → amber → red).
 - Live word counter while typing, with colour cues for the recommended 100–200 word range.
 - Essay box and submit button automatically disable once time runs out.
