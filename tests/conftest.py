@@ -39,6 +39,9 @@ class _FakeQuery:
         rows = self.table.rows
         if self.op == "select":
             return _Resp([r for r in rows if self._matches(r)])
+        if self.op == "insert":
+            rows.append(dict(self.payload))
+            return _Resp([self.payload])
         if self.op == "upsert":
             pk = self.table.pk
             existing = next((r for r in rows if r.get(pk) == self.payload.get(pk)), None)
@@ -62,6 +65,9 @@ class _FakeTable:
 
     def select(self, cols="*"):
         return _FakeQuery(self, "select")
+
+    def insert(self, payload):
+        return _FakeQuery(self, "insert", payload)
 
     def upsert(self, payload):
         return _FakeQuery(self, "upsert", payload)

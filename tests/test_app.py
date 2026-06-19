@@ -58,15 +58,15 @@ def test_word_count_color_bands(words, expected_color):
 def test_save_and_load_submissions_roundtrip(fake_supabase):
     app.save_submission("1cr21cs001", {"name": "Alice", "status": "started"})
     subs = app.load_submissions()
-    assert subs == {"1CR21CS001": {"name": "Alice", "status": "started"}}
+    assert subs == [{"name": "Alice", "status": "started"}]
 
 
-def test_save_submission_upserts_same_usn(fake_supabase):
-    app.save_submission("1CR21CS001", {"status": "started"})
+def test_save_submission_creates_separate_entry_per_attempt(fake_supabase):
+    app.save_submission("1CR21CS001", {"status": "completed", "total_score": 70})
     app.save_submission("1cr21cs001", {"status": "completed", "total_score": 90})
     subs = app.load_submissions()
-    assert len(subs) == 1
-    assert subs["1CR21CS001"]["status"] == "completed"
+    assert len(subs) == 2
+    assert [s["total_score"] for s in subs] == [70, 90]
 
 
 def test_already_submitted(fake_supabase):
@@ -79,7 +79,7 @@ def test_clear_all_submissions(fake_supabase):
     app.save_submission("1CR21CS001", {"status": "started"})
     app.save_submission("1CR21CS002", {"status": "started"})
     app.clear_all_submissions()
-    assert app.load_submissions() == {}
+    assert app.load_submissions() == []
 
 
 def test_paste_enabled_defaults_false_when_unset(fake_supabase):

@@ -96,7 +96,7 @@ ESSAY_TOPICS  = [
     "The Necessity of Continuous Learning for Software Engineers",
     "Social Media: A Tool for Connection or Professional Distraction?",
     "Synthetic Media and the Death of Truth: Can Democracy Survive an Internet Where Anything Can Be Faked?",
-    "Engineering Compulsion: Are Software Developers Accountable for Algorithms Built to Exploit Human Psychology?",
+    "The 'Hook' Economy: Who Is to Blame When Our Apps Become Addictive?",
 ]
 
 # ── Supabase client ─────────────────────────────────────────────────────────────
@@ -107,12 +107,12 @@ def get_supabase():
     return create_client(url, key)
 
 # ── Storage helpers ─────────────────────────────────────────────────────────────
-def load_submissions() -> dict:
+def load_submissions() -> list:
     resp = get_supabase().table("submissions").select("usn, data").execute()
-    return {row["usn"]: row["data"] for row in resp.data}
+    return [row["data"] for row in resp.data]
 
 def save_submission(usn: str, data: dict):
-    get_supabase().table("submissions").upsert({"usn": usn.upper(), "data": data}).execute()
+    get_supabase().table("submissions").insert({"usn": usn.upper(), "data": data}).execute()
 
 def already_submitted(usn: str) -> bool:
     resp = get_supabase().table("submissions").select("usn").eq("usn", usn.upper()).execute()
@@ -307,7 +307,6 @@ if st.session_state.page == "home":
         - You have **20 minutes** from the moment you start the test.
         - Essay must be **100–200 words**.
         - Once submitted, **no edits** are allowed.
-        - One submission per USN.
         """)
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -317,15 +316,7 @@ if st.session_state.page == "home":
                 st.error("Please fill in all required fields.")
             elif not is_valid_usn(usn):
                 st.error(f"Invalid USN: **{usn.upper()}**")
-            elif not is_admin_session and already_submitted(usn.strip()):
-                st.error(f"USN **{usn.upper()}** has already attempted this test. Only one attempt per USN is allowed.")
             else:
-                if not is_admin_session:
-                    save_submission(usn.strip(), {
-                        "name": name.strip(), "usn": usn.strip().upper(),
-                        "topic": topic,
-                        "status": "started", "started_at": datetime.datetime.now().isoformat(),
-                    })
                 st.session_state.student_info = {
                     "name": name.strip(), "usn": usn.strip().upper(),
                     "topic": topic,
@@ -507,7 +498,8 @@ elif st.session_state.page == "result":
         info = st.session_state.student_info
         if info:
             subs = load_submissions()
-            r = subs.get(info["usn"].upper())
+            matches = [s for s in subs if s.get("usn") == info["usn"].upper()]
+            r = max(matches, key=lambda s: s.get("submitted_at", ""), default=None)
             st.session_state.result = r
 
     if r is None:
@@ -604,9 +596,9 @@ elif st.session_state.page == "report":
         st.info("No submissions yet.")
     else:
         total = len(subs)
-        avg   = sum(v.get("total_score", 0) for v in subs.values()) / total
+        avg   = sum(v.get("total_score", 0) for v in subs) / total
         grade_counts = {}
-        for v in subs.values():
+        for v in subs:
             g = v.get("grade", "F")
             grade_counts[g] = grade_counts.get(g, 0) + 1
 
@@ -628,7 +620,8 @@ elif st.session_state.page == "report":
           <span>SCORE</span><span>GRADE</span>
         </div>""", unsafe_allow_html=True)
 
-        for usn, v in sorted(subs.items(), key=lambda x: x[1].get("total_score", 0), reverse=True):
+        for v in sorted(subs, key=lambda x: x.get("total_score", 0), reverse=True):
+            usn = v.get("usn", "")
             g = v.get("grade", "F")
             if g not in grade_filter:
                 continue
@@ -656,9 +649,9 @@ elif st.session_state.page == "report":
                           "Content & Understanding","Critical Thinking & Analysis","Organization & Structure",
                           "Relevance & Supporting Examples","Language & Presentation",
                           "Actual Words","Submitted At","Strengths","Improvements","Feedback"])
-        for usn, v in subs.items():
+        for v in subs:
             writer.writerow([
-                v.get("name"), usn, v.get("topic"),
+                v.get("name"), v.get("usn"), v.get("topic"),
                 v.get("total_score"), v.get("grade"), v.get("grade_label"),
                 v.get("content_score"), v.get("critical_thinking_score"), v.get("organization_score"),
                 v.get("evidence_score"), v.get("language_score"), v.get("word_count"),
