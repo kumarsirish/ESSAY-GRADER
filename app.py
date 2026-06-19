@@ -222,7 +222,7 @@ def submit_essay(info: dict, essay: str, words: int):
         try:
             result = grade_essay(info["name"], info["topic"], essay)
             result["essay"]        = essay
-            result["word_count"]   = words
+            result["word_count"]   = min(words, 200)
             result["submitted_at"] = datetime.datetime.now().isoformat()
             result["name"]         = info["name"]
             result["usn"]          = info["usn"]
