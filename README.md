@@ -123,10 +123,8 @@ Data storage is no longer a concurrency bottleneck: Supabase (Postgres) handles 
 
 ## Admin access
 
-Navigate to the app → select **Admin Report** → enter:
-```
-sirish.k@cmrit.ac.in
-```
+Navigate to the app → select **Admin Report** → enter email:
+
 
 From the Admin Report page, a **"Allow copy-paste in the essay window for students"** toggle controls whether students can copy/paste/cut in the essay box. It's on by default. Toggling it updates the `app_config` row in Supabase and applies to all students within ~30 seconds (the exam page auto-refreshes every 30s).
 
