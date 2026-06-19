@@ -268,6 +268,11 @@ def word_count_color(words: int) -> str:
         return "#9a6700"
     return "#bc4c00"
 
+def format_test_datetime(iso_str: str) -> str:
+    if not iso_str:
+        return ""
+    return datetime.datetime.fromisoformat(iso_str).strftime("%d-%b-%y %H:%M")
+
 # ── Session defaults ────────────────────────────────────────────────────────────
 for key, val in {
     "page": "home",
@@ -275,6 +280,7 @@ for key, val in {
     "result": None,
     "submitted": False,
     "auto_submit_done": False,
+    "confirm_cancel": False,
 }.items():
     if key not in st.session_state:
         st.session_state[key] = val
@@ -470,9 +476,32 @@ elif st.session_state.page == "exam":
         with st.container(key="auto_submit_container"):
             auto_submit_clicked = st.button("auto-submit-on-timeout", key="auto_submit_btn")
 
-        submit_col, _ = st.columns([1, 3])
+        submit_col, cancel_col, _ = st.columns([1, 1, 2])
         with submit_col:
             manual_submit_clicked = st.button("✅ Submit Essay", use_container_width=True, disabled=(secs == 0))
+        with cancel_col:
+            cancel_clicked = st.button("❌ Cancel Test", use_container_width=True)
+
+        if cancel_clicked:
+            st.session_state.confirm_cancel = True
+
+        if st.session_state.confirm_cancel:
+            st.warning("Are you sure you want to cancel? Your essay will be discarded and this attempt will not be saved.")
+            yes_col, no_col, _ = st.columns([1, 1, 2])
+            with yes_col:
+                if st.button("Yes, cancel", use_container_width=True):
+                    st.session_state.student_info     = None
+                    st.session_state.result            = None
+                    st.session_state.submitted         = False
+                    st.session_state.auto_submit_done  = False
+                    st.session_state.confirm_cancel    = False
+                    st.session_state.pop("timer_start", None)
+                    st.session_state.page = "home"
+                    st.rerun()
+            with no_col:
+                if st.button("No, keep writing", use_container_width=True):
+                    st.session_state.confirm_cancel = False
+                    st.rerun()
 
         if auto_submit_clicked:
             submit_essay(info, essay, words)
@@ -621,11 +650,11 @@ elif st.session_state.page == "report":
         grade_filter = st.multiselect("Filter by grade", ["A","B","C","D","F"], default=["A","B","C","D","F"])
 
         st.markdown("""
-        <div style="display:grid;grid-template-columns:2fr 1.5fr 2fr 1fr 1fr;
+        <div style="display:grid;grid-template-columns:1.8fr 1.3fr 1.8fr 1.3fr 0.8fr 0.8fr;
              gap:.5rem;padding:.5rem 1rem;background:#f6f8fa;border-radius:6px;
              font-size:.78rem;font-weight:600;color:#57606a;margin-bottom:.4rem;">
           <span>NAME</span><span>USN</span><span>TOPIC</span>
-          <span>SCORE</span><span>GRADE</span>
+          <span>DATE &amp; TIME</span><span>SCORE</span><span>GRADE</span>
         </div>""", unsafe_allow_html=True)
 
         for v in sorted(subs, key=lambda x: x.get("total_score", 0), reverse=True):
@@ -638,13 +667,15 @@ elif st.session_state.page == "report":
                 continue
             grade_cls   = f"grade-{g}"
             topic_short = v.get("topic","")[:30] + ("…" if len(v.get("topic","")) > 30 else "")
+            taken_at    = format_test_datetime(v.get("submitted_at", ""))
             st.markdown(f"""
-            <div style="display:grid;grid-template-columns:2fr 1.5fr 2fr 1fr 1fr;
+            <div style="display:grid;grid-template-columns:1.8fr 1.3fr 1.8fr 1.3fr 0.8fr 0.8fr;
                  gap:.5rem;padding:.6rem 1rem;background:#ffffff;border:1px solid #d0d7de;
                  border-radius:6px;margin-bottom:.3rem;font-size:.82rem;align-items:center;">
               <span style="color:#1f2328;font-weight:500;">{v.get('name','')}</span>
               <span style="font-family:'JetBrains Mono',monospace;color:#57606a;">{usn}</span>
               <span style="color:#57606a;font-size:.75rem;">{topic_short}</span>
+              <span style="font-family:'JetBrains Mono',monospace;color:#57606a;font-size:.75rem;">{taken_at}</span>
               <span style="color:#1f2328;font-weight:600;">{v.get('total_score',0)}</span>
               <span class="grade-badge {grade_cls}" style="font-size:.75rem;">{g}</span>
             </div>""", unsafe_allow_html=True)
@@ -653,17 +684,17 @@ elif st.session_state.page == "report":
         import csv, io
         buf = io.StringIO()
         writer = csv.writer(buf)
-        writer.writerow(["Name","USN","Topic","Total Score","Grade","Grade Label",
+        writer.writerow(["Name","USN","Topic","Date & Time","Total Score","Grade","Grade Label",
                           "Content & Understanding","Critical Thinking & Analysis","Organization & Structure",
                           "Relevance & Supporting Examples","Language & Presentation",
-                          "Actual Words","Submitted At","Strengths","Improvements","Feedback"])
+                          "Actual Words","Strengths","Improvements","Feedback"])
         for v in subs:
             writer.writerow([
-                v.get("name"), v.get("usn"), v.get("topic"),
+                v.get("name"), v.get("usn"), v.get("topic"), format_test_datetime(v.get("submitted_at", "")),
                 v.get("total_score"), v.get("grade"), v.get("grade_label"),
                 v.get("content_score"), v.get("critical_thinking_score"), v.get("organization_score"),
                 v.get("evidence_score"), v.get("language_score"), v.get("word_count"),
-                v.get("submitted_at"), v.get("strengths"), v.get("improvements"), v.get("overall_feedback"),
+                v.get("strengths"), v.get("improvements"), v.get("overall_feedback"),
             ])
         st.download_button("⬇️ Download Full Report (CSV)", buf.getvalue(),
                            file_name="essay_report.csv", mime="text/csv")
