@@ -93,9 +93,8 @@ MAX_SECONDS   = MAX_MINUTES * 60
 ESSAY_TOPICS  = [
     "Artificial Intelligence: Workforce Replacement or Opportunity Creation?",
     "Remote Work vs. Office Collaboration: The Productivity Debate",
-    "The Necessity of Continuous Learning for Software Engineers",
     "Social Media: A Tool for Connection or Professional Distraction?",
-    "Synthetic Media and the Death of Truth: Can Democracy Survive an Internet Where Anything Can Be Faked?",
+    "The Death of Truth: Can Democracy Survive an Internet Where Anything Can Be Faked?",
     "The 'Hook' Economy: Who Is to Blame When Our Apps Become Addictive?",
 ]
 
